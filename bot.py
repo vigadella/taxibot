@@ -40,7 +40,7 @@ def button_handler(update, context):
 
 def auto_update(context):
     # Автообновление — можно отправлять сообщение администратору или пользователю
-    chat_id = YOUR_CHAT_ID  # замените на ваш chat_id
+    chat_id = 8247364713:AAG7jB2Y4zqn81j6Y7Sawo_fpLAb4I6CL6w  # замените на ваш chat_id
     context.bot.send_message(chat_id=chat_id, text=utils.get_stats())
 
 def main():
