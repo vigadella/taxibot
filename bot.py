@@ -1,20 +1,10 @@
-import telebot
-import os
-
-TOKEN = os.getenv("BOT_TOKEN")
-
-bot = telebot.TeleBot(TOKEN)
-
-@bot.message_handler(commands=['start'])
-def start(message):
-    bot.send_message(message.chat.id, "Бот работает! 🚖")
-
-bot.polling(none_stop=True)
-
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CallbackQueryHandler, CommandHandler, JobQueue
-import config, utils
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
 
+# Токен бота
+TOKEN = "8247364713:AAG7jB2Y4zqn81j6Y7Sawo_fpLAb4I6CL6w"
+
+# Главное меню
 def main_menu_markup():
     keyboard = [
         [InlineKeyboardButton("📊 Моя статистика", callback_data='stats')],
@@ -26,36 +16,31 @@ def main_menu_markup():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def start(update, context):
-    update.message.reply_text("Выберите действие:", reply_markup=main_menu_markup())
+# Команда /start
+async def start(update, context):
+    await update.message.reply_text("Выберите действие:", reply_markup=main_menu_markup())
 
-def button_handler(update, context):
+# Обработка нажатий
+async def button_handler(update, context):
     query = update.callback_query
-    query.answer()
-    
+    await query.answer()
+
     if query.data == 'stats':
-        query.edit_message_text(text=utils.get_stats(), reply_markup=main_menu_markup())
+        stats_text = (
+            "📊 Твоя статистика за сегодня:\n"
+            "— Онлайн: 4ч 12м / 12ч\n"
+            "— Осталось: 7ч 48м\n"
+            "— Заработано: 15 560 ₸\n"
+            "— До аренды осталось: 6 630 ₸\n"
+            "— Чистыми: -6 630 ₸"
+        )
+        await query.edit_message_text(text=stats_text, reply_markup=main_menu_markup())
     else:
-        query.edit_message_text(text=f"Вы нажали: {query.data}", reply_markup=main_menu_markup())
+        await query.edit_message_text(text=f"Вы нажали: {query.data}", reply_markup=main_menu_markup())
 
-def auto_update(context):
-    # Автообновление — можно отправлять сообщение администратору или пользователю
-    chat_id = 8247364713:AAG7jB2Y4zqn81j6Y7Sawo_fpLAb4I6CL6w  # замените на ваш chat_id
-    context.bot.send_message(chat_id=chat_id, text=utils.get_stats())
-
-def main():
-    updater = Updater(config.TOKEN, use_context=True)
-    dp = updater.dispatcher
-
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CallbackQueryHandler(button_handler))
-    
-    # Запускаем автообновление каждые UPDATE_INTERVAL секунд
-    job_queue = updater.job_queue
-    job_queue.run_repeating(auto_update, interval=config.UPDATE_INTERVAL, first=10)
-    
-    updater.start_polling()
-    updater.idle()
-
+# Запуск бота
 if __name__ == "__main__":
-    main()
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.run_polling()
