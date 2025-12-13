@@ -8,7 +8,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
 RENT = 22190
-LIMIT_HOURS = 12
+LIMIT_HOURS = 0.1
 
 # ===== БАЗА ДАННЫХ =====
 conn = sqlite3.connect("data.db", check_same_thread=False)
