@@ -68,72 +68,33 @@ def stats_text(u):
     if u["shift"]:
         online = (time.time() - u["shift"]) / 3600
 
+    earned = u["earned"]
+    left_hours = max(0, LIMIT_HOURS - online)
+
+    income_per_hour = earned / online if online > 0 else 0
+    forecast = earned + income_per_hour * left_hours
+
+    net_income = earned - RENT
+    forecast_net = forecast - RENT
+
+    окупился = "✅ Да" if earned >= RENT else "❌ Нет"
+
     return (
-        "📊 <b>Твоя статистика</b>\n\n"
-        f"⏱ Онлайн: <b>{online:.2f}</b> / {LIMIT_HOURS} ч\n"
-        f"⏳ Осталось: <b>{max(0, LIMIT_HOURS - online):.2f}</b> ч\n\n"
-        f"💰 Заработано: <b>{u['earned']} ₸</b>\n"
+        "📊 <b>Финансовая статистика</b>\n\n"
+
+        f"⏱ Онлайн: <b>{online:.2f}</b> ч / {LIMIT_HOURS}\n"
+        f"⏳ Осталось: <b>{left_hours:.2f}</b> ч\n\n"
+
+        f"💰 Заработано: <b>{earned} ₸</b>\n"
+        f"💵 В час: <b>{income_per_hour:.0f} ₸</b>\n\n"
+
         f"🚗 Аренда: <b>{RENT} ₸</b>\n"
-        f"❗ До аренды: <b>{max(0, RENT - u['earned'])} ₸</b>"
+        f"📉 Чистыми сейчас: <b>{net_income} ₸</b>\n"
+        f"📈 Прогноз чистыми: <b>{forecast_net:.0f} ₸</b>\n\n"
+
+        f"🔮 Прогноз до конца смены: <b>{forecast:.0f} ₸</b>\n"
+        f"🏁 Аренда отбита: <b>{окупился}</b>"
     )
-
-
-def stats_kb():
-    kb = telebot.types.InlineKeyboardMarkup()
-    kb.add(
-        telebot.types.InlineKeyboardButton("🔄 Обновить", callback_data="refresh"),
-        telebot.types.InlineKeyboardButton("🛑 Закончить смену", callback_data="stop")
-    )
-    return kb
-
-
-@bot.message_handler(commands=["start"])
-def start(m):
-    get_user(m.chat.id)
-    bot.send_message(
-        m.chat.id,
-        "🚖 Бот готов к работе",
-        reply_markup=main_menu()
-    )
-
-
-@bot.message_handler(func=lambda m: m.text == "🟢 Начать смену")
-def start_shift(m):
-    u = get_user(m.chat.id)
-
-    if u["shift"]:
-        bot.send_message(m.chat.id, "⚠️ Смена уже идёт")
-        return
-
-    u["shift"] = time.time()
-    u["n1"] = u["n30"] = u["n10"] = 0
-    update_user(m.chat.id, u)
-
-    bot.send_message(m.chat.id, "🟢 Смена началась")
-
-
-@bot.message_handler(func=lambda m: m.text == "📊 Статистика")
-def show_stats(m):
-    u = get_user(m.chat.id)
-    bot.send_message(
-        m.chat.id,
-        stats_text(u),
-        parse_mode="HTML",
-        reply_markup=stats_kb()
-    )
-
-
-@bot.callback_query_handler(func=lambda c: c.data == "refresh")
-def refresh(c):
-    u = get_user(c.message.chat.id)
-    bot.edit_message_text(
-        stats_text(u),
-        c.message.chat.id,
-        c.message.message_id,
-        parse_mode="HTML",
-        reply_markup=stats_kb()
-    )
-
 
 @bot.callback_query_handler(func=lambda c: c.data == "stop")
 def stop(c):
