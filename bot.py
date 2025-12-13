@@ -2,6 +2,7 @@ import telebot
 import time
 import os
 import sqlite3
+import threading
 
 TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
@@ -17,7 +18,10 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
     shift_start REAL,
-    earned INTEGER
+    earned INTEGER,
+    notified_1h INTEGER DEFAULT 0,
+    notified_30m INTEGER DEFAULT 0,
+    notified_10m INTEGER DEFAULT 0
 )
 """)
 conn.commit()
@@ -29,20 +33,35 @@ def get_user(user_id):
 
     if not user:
         cursor.execute(
-            "INSERT INTO users (user_id, shift_start, earned) VALUES (?, ?, ?)",
+            "INSERT INTO users VALUES (?, ?, ?, 0, 0, 0)",
             (user_id, None, 0)
         )
         conn.commit()
-        return {"shift_start": None, "earned": 0}
+        return {
+            "shift_start": None,
+            "earned": 0,
+            "n1": 0, "n30": 0, "n10": 0
+        }
 
-    return {"shift_start": user[1], "earned": user[2]}
+    return {
+        "shift_start": user[1],
+        "earned": user[2],
+        "n1": user[3],
+        "n30": user[4],
+        "n10": user[5]
+    }
 
 
-def update_user(user_id, shift_start, earned):
-    cursor.execute(
-        "UPDATE users SET shift_start = ?, earned = ? WHERE user_id = ?",
-        (shift_start, earned, user_id)
-    )
+def update_user(user_id, user):
+    cursor.execute("""
+        UPDATE users
+        SET shift_start=?, earned=?, notified_1h=?, notified_30m=?, notified_10m=?
+        WHERE user_id=?
+    """, (
+        user["shift_start"], user["earned"],
+        user["n1"], user["n30"], user["n10"],
+        user_id
+    ))
     conn.commit()
 
 
@@ -60,7 +79,7 @@ def start(message):
     get_user(message.chat.id)
     bot.send_message(
         message.chat.id,
-        "🚖 Привет! Данные теперь сохраняются ✅\n\nВыбери действие:",
+        "🚖 Бот активен.\n🔔 Уведомления по времени включены.",
         reply_markup=main_menu()
     )
 
@@ -74,7 +93,8 @@ def start_shift(message):
         return
 
     user["shift_start"] = time.time()
-    update_user(message.chat.id, user["shift_start"], user["earned"])
+    user["n1"] = user["n30"] = user["n10"] = 0
+    update_user(message.chat.id, user)
 
     bot.send_message(message.chat.id, "🟢 Смена началась!")
 
@@ -89,7 +109,7 @@ def stop_shift(message):
 
     hours = (time.time() - user["shift_start"]) / 3600
     user["shift_start"] = None
-    update_user(message.chat.id, None, user["earned"])
+    update_user(message.chat.id, user)
 
     bot.send_message(
         message.chat.id,
@@ -109,7 +129,7 @@ def save_income(message):
     try:
         amount = int(message.text)
         user["earned"] += amount
-        update_user(message.chat.id, user["shift_start"], user["earned"])
+        update_user(message.chat.id, user)
         bot.send_message(message.chat.id, f"✅ Добавлено {amount} ₸")
     except:
         bot.send_message(message.chat.id, "❌ Введи число")
@@ -137,5 +157,35 @@ def stats(message):
 
     bot.send_message(message.chat.id, text)
 
+
+# ===== ФОНОВАЯ ПРОВЕРКА ВРЕМЕНИ =====
+def notifier():
+    while True:
+        cursor.execute("SELECT user_id FROM users WHERE shift_start IS NOT NULL")
+        users_ids = cursor.fetchall()
+
+        for (uid,) in users_ids:
+            user = get_user(uid)
+            online = (time.time() - user["shift_start"]) / 3600
+            left = LIMIT_HOURS - online
+
+            if left <= 1 and not user["n1"]:
+                bot.send_message(uid, "🔔 Остался 1 час до лимита!")
+                user["n1"] = 1
+
+            if left <= 0.5 and not user["n30"]:
+                bot.send_message(uid, "⚠️ Осталось 30 минут!")
+                user["n30"] = 1
+
+            if left <= 0.17 and not user["n10"]:
+                bot.send_message(uid, "🚨 Осталось 10 минут! Срочно заверши смену.")
+                user["n10"] = 1
+
+            update_user(uid, user)
+
+        time.sleep(60)
+
+
+threading.Thread(target=notifier, daemon=True).start()
 
 bot.polling(none_stop=True)
