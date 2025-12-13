@@ -1,24 +1,49 @@
 import telebot
 import time
 import os
+import sqlite3
 
 TOKEN = os.getenv("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 
-# ===== ХРАНИЛИЩЕ (пока в памяти) =====
-users = {}
+RENT = 22190
+LIMIT_HOURS = 12
 
-RENT = 22190          # аренда в тенге
-LIMIT_HOURS = 12     # лимит часов
+# ===== БАЗА ДАННЫХ =====
+conn = sqlite3.connect("data.db", check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    shift_start REAL,
+    earned INTEGER
+)
+""")
+conn.commit()
 
 
-def get_user(uid):
-    if uid not in users:
-        users[uid] = {
-            "shift_start": None,
-            "earned": 0
-        }
-    return users[uid]
+def get_user(user_id):
+    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
+
+    if not user:
+        cursor.execute(
+            "INSERT INTO users (user_id, shift_start, earned) VALUES (?, ?, ?)",
+            (user_id, None, 0)
+        )
+        conn.commit()
+        return {"shift_start": None, "earned": 0}
+
+    return {"shift_start": user[1], "earned": user[2]}
+
+
+def update_user(user_id, shift_start, earned):
+    cursor.execute(
+        "UPDATE users SET shift_start = ?, earned = ? WHERE user_id = ?",
+        (shift_start, earned, user_id)
+    )
+    conn.commit()
 
 
 def main_menu():
@@ -35,7 +60,7 @@ def start(message):
     get_user(message.chat.id)
     bot.send_message(
         message.chat.id,
-        "🚖 Привет! Я твой помощник таксиста.\n\nВыбери действие 👇",
+        "🚖 Привет! Данные теперь сохраняются ✅\n\nВыбери действие:",
         reply_markup=main_menu()
     )
 
@@ -49,7 +74,9 @@ def start_shift(message):
         return
 
     user["shift_start"] = time.time()
-    bot.send_message(message.chat.id, "🟢 Смена началась! Удачной дороги 🚗")
+    update_user(message.chat.id, user["shift_start"], user["earned"])
+
+    bot.send_message(message.chat.id, "🟢 Смена началась!")
 
 
 @bot.message_handler(func=lambda m: m.text == "🛑 Закончить смену")
@@ -57,11 +84,12 @@ def stop_shift(message):
     user = get_user(message.chat.id)
 
     if not user["shift_start"]:
-        bot.send_message(message.chat.id, "⚠️ Смена ещё не начата")
+        bot.send_message(message.chat.id, "⚠️ Смена не начата")
         return
 
     hours = (time.time() - user["shift_start"]) / 3600
     user["shift_start"] = None
+    update_user(message.chat.id, None, user["earned"])
 
     bot.send_message(
         message.chat.id,
@@ -81,6 +109,7 @@ def save_income(message):
     try:
         amount = int(message.text)
         user["earned"] += amount
+        update_user(message.chat.id, user["shift_start"], user["earned"])
         bot.send_message(message.chat.id, f"✅ Добавлено {amount} ₸")
     except:
         bot.send_message(message.chat.id, "❌ Введи число")
@@ -90,10 +119,9 @@ def save_income(message):
 def stats(message):
     user = get_user(message.chat.id)
 
+    online = 0
     if user["shift_start"]:
         online = (time.time() - user["shift_start"]) / 3600
-    else:
-        online = 0
 
     left_hours = max(0, LIMIT_HOURS - online)
     left_rent = max(0, RENT - user["earned"])
