@@ -4,7 +4,7 @@ import os
 import sqlite3
 import threading
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("8247364713:AAG7jB2Y4zqn81j6Y7Sawo_fpLAb4I6CL6w")
 bot = telebot.TeleBot(TOKEN)
 
 RENT = 22190
