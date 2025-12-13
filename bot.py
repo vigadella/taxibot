@@ -197,3 +197,66 @@ def notifier():
 
 threading.Thread(target=notifier, daemon=True).start()
 bot.polling(none_stop=True)
+
+# === ДОБАВЛЕНО: ЯНДЕКС-ПОДГОТОВКА ===
+# ❗ Без логинов и паролей
+
+import telebot
+import time
+import os
+import sqlite3
+import threading
+
+TOKEN = os.getenv("BOT_TOKEN")
+bot = telebot.TeleBot(TOKEN)
+
+RENT = 22190
+LIMIT_HOURS = 12
+
+conn = sqlite3.connect("data.db", check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    shift_start REAL,
+    earned INTEGER,
+    yandex_id TEXT,
+    notified_1h INTEGER,
+    notified_30m INTEGER,
+    notified_10m INTEGER
+)
+""")
+conn.commit()
+
+
+def get_user(uid):
+    cursor.execute("SELECT * FROM users WHERE user_id=?", (uid,))
+    u = cursor.fetchone()
+
+    if not u:
+        cursor.execute(
+            "INSERT INTO users VALUES (?, ?, ?, ?, 0, 0, 0)",
+            (uid, None, 0, None)
+        )
+        conn.commit()
+        return {"shift": None, "earned": 0, "yandex": None, "n1": 0, "n30": 0, "n10": 0}
+
+    return {
+        "shift": u[1],
+        "earned": u[2],
+        "yandex": u[3],
+        "n1": u[4],
+        "n30": u[5],
+        "n10": u[6]
+    }
+
+
+def update_user(uid, u):
+    cursor.execute("""
+        UPDATE users
+        SET shift_start=?, earned=?, yandex_id=?,
+            notified_1h=?, notified_30m=?, notified_10m=?
+        WHERE user_id=?
+    """, (u["shift"], u["earned"], u["yandex"], u["n1"], u["n30"], u["n10"], uid))
+    conn.commit()
